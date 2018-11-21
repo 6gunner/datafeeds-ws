@@ -1,0 +1,27 @@
+{
+  "name": "@gs/datafeeds-ws",
+  "version": "1.1.0",
+  "private": false,
+  "main": "dist/bundle.js",
+  "scripts": {
+    "build": "NODE_ENV=production rollup -c rollup.config.js",
+    "dev": "NODE_ENV=development rollup -c rollup.config.js"
+  },
+  "devDependencies": {
+    "babel-core": "^6.26.3",
+    "babel-loader": "^7.1.4",
+    "babel-plugin-external-helpers": "^6.22.0",
+    "babel-plugin-transform-remove-console": "^6.9.4",
+    "babel-plugin-transform-runtime": "^6.23.0",
+    "babel-preset-env": "^1.7.0",
+    "babel-preset-stage-2": "^6.24.1",
+    "clean-webpack-plugin": "^0.1.19",
+    "rollup": "^0.60.7",
+    "rollup-plugin-babel": "^3.0.4",
+    "rollup-plugin-node-resolve": "^3.3.0",
+    "rollup-plugin-uglify": "^4.0.0"
+  },
+  "dependencies": {
+    "underscore": "^1.9.1"
+  }
+}
