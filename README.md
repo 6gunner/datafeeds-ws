@@ -1,41 +1,21 @@
-# UDF Compatible Datafeed
+# UDFDatafeed-WS
 
-This folder contains UDF & WS datafeed adapter. It implements [JS API](https://github.com/tradingview/charting_library/wiki/JS%20API) and makes HTTP requests using WS protocol.
+这个项目用ws的方式实现了[JS API](https://github.com/tradingview/charting_library/wiki/JS%20API)
+帮组大家通过ws的方式来订阅trading view的数据
 
+## 目录内容
 
-This datafeed is implemented in JavaScript
+- `./src` 源代码.
+- `./dist` 打包内容
 
-## Folders content
+## 打包方式
 
-- `./src` folder contains the source code in JavaScript.
+打包前运行 `npm install` 安装依赖
 
-- `./dist` folder contains bundled JavaScript files which can be inlined into a page and used in the Widget Constructor.
+`package.json` 包含了以下2个脚本:
+- `npm run build` 编译打包生产环境的代码，不包含注释
+- `npm run dev` 编译打包测试环境的代码，包含注释
 
-## Build & bundle
+## 备注
 
-Before building or bundling your code you need to run `npm install` to install dependencies.
-
-`package.json` contains some handy scripts to build or generate the bundle:
-- `npm run compile` to compile TypeScript source code into JavaScript files (output will be in `./lib` folder)
-- `npm run bundle-js` to bundle multiple JavaScript files into one bundle (it also bundle polyfills)
-- `npm run build` to compile and bundle (it is a combination of all above commands)
-
-NOTE: if you want to minify the bundle code, you need to set `ENV` environment variable to a value different from `development`.
-
-For example:
-```bash
-export ENV=prod
-npm run bundle-js # or npm run build
-```
-
-or
-
-```bash
-ENV=prod npm run bundle-js
-```
-
-or
-
-```bash
-ENV=prod npm run build
-```
+这个只是客户端的连接数据的ws实现方式，具体的数据还需要有对应的ws的服务端进行提供
