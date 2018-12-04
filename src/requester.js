@@ -1,48 +1,51 @@
-import _ from 'underscore'
+import _ from 'underscore';
 import { getErrorMessage, logMessage } from './helpers';
-import {WS} from './ws'
+import { WS } from './ws';
+
 export class Requester {
-  constructor (url) {
-    let ws = new WS(url, {
-      reconnection: true
-    })
-    ws.on('open', event => {
-      logMessage(`k线行情连接成功`)
-      _.each(this._callbacks, (callback, callbackKey) => {
-          this.ws.send(callback.req)
-      })
-    })
-    ws.on('message', event => {
-      let data = event.data
+  constructor(url) {
+    const ws = new WS(url, {
+      reconnection: true,
+    });
+    ws.on('open', () => {
+      logMessage('k线行情连接成功');
+      _.each(this._callbacks, (callback) => {
+        this.ws.send(callback.req);
+      });
+    });
+    ws.on('message', (event) => {
+      const { data } = event;
       if (!data) {
-        return
+        return;
       }
-      data = JSON.parse(data)
-      if(data.id > 0 && this._callbacks[data.id]){
-        let callback = this._callbacks[data.id].callback;
-        callback(event, data)
+      const dataJson = JSON.parse(data);
+      // getServerTime || getSymbol || getKline
+      if (dataJson.id > 0 && this._callbacks[dataJson.api]) {
+        const { callback } = this._callbacks[dataJson.api];
+        callback(event, dataJson);
       } else {
-        let func = this._callbacks[data.api+'#'+data.topic];
-        if(func){
-          func.callback(data)
+        // 订阅的币对数据
+        const func = this._callbacks[`${dataJson.api}#${dataJson.topic}`];
+        if (func) {
+          func.callback(dataJson);
         }
       }
-    })
-    ws.on('close', event => {
-      logMessage(`k线行情断开成功`)
-    })
-    this.ws = ws
-    this._url = url
-    this._callbacks = {}
-    this._requests = []
+    });
+    ws.on('close', () => {
+      logMessage('k线行情断开成功');
+    });
+    this.ws = ws;
+    this._callbacks = {};
+    this._requests = [];
   }
-  subscribe (api, topic, onSubscriberDataReceived) {
+
+  subscribe(api, topic, onSubscriberDataReceived) {
     logMessage(`订阅新的主题：api: ${api}, topic: ${topic}`)
-    let req = {
+    const req = {
       id: _.uniqueId(),
-      api: api,
-      topic: topic,
-      type: 0
+      api,
+      topic,
+      type: 0,
     }
     this.ws.send(req)
     this._callbacks[api+'#'+topic] = {req, callback: onSubscriberDataReceived}
@@ -82,7 +85,7 @@ export class Requester {
         resolve(resp)
       }
       // 缓存所有请求连接上再发送
-      this._callbacks[id] = {
+      this._callbacks[api] = {
         req: req,
         callback: callback
       }

@@ -9,36 +9,34 @@ function defaultConfiguration() {
   return {
     supports_search: false,
     supports_group_request: false,
-    exchanges: [],
-    symbols_types: [], //用来不过滤币对
-    supported_resolutions : ['1', '5', '15', '30', '60', 'D'],
-    supports_marks : false,
-    supports_timescale_marks : false, //是否支持时间缩放
-    supports_time : true
-  }
+    exchanges: '', // []表示不过滤交易市场, ''表示包括所有交易市场
+    symbols_types: '', // []表示不过滤币对，''表示包括所有交易币对
+    supported_resolutions: ['1', '5', '15', '30', '60', 'D'],
+    supports_marks: false,
+    supports_timescale_marks: false, // 是否支持时间缩放
+    supports_time: true,
+  };
 }
 function getPeriodByInterval(interval) {
   try {
-    let matched = interval.toString().match(/^(\d+)?([SDWM]?)?$/)
-    let input = matched[0]
-    let num = matched[1] || 1
-    let resolution = matched[2]
+    const matched = interval.toString().match(/^(\d+)?([SDWM]?)?$/);
+    const num = matched[1] || 1; // 数量
+    const resolution = matched[2]; // 单位
     switch (resolution) {
       case 'S':
-        return num + 's';
+        return num * 60;
       case 'D':
-        return num + 'day';
       case 'W':
-        return 1 + 'day';
       case 'M':
-        return 1 + 'day';
+        return 86400;
       default:
-        return num % 60 == 0 && num > 60 ? num / 60 + 'hour': num + 'min'
+        return num * 60;
     }
-  } catch(e) {
-    throw interval
+  } catch (e) {
+    throw interval;
   }
 }
+
 function getIntervalByPeriod(period) {
   try {
     let matched = period.match(/^(\d+)(s|min|hour|day|mon|week|year)$/)
@@ -49,7 +47,7 @@ function getIntervalByPeriod(period) {
       case 's':
         return r + 'S';
       case 'hour':
-        return "" + 60 * r;
+        return '' + 60 * r;
       case 'day':
         return r + 'D';
       case 'week':
@@ -66,12 +64,13 @@ function getIntervalByPeriod(period) {
   }
 }
 
-export class WSCompatibleDatafeedBase{
+export class WSCompatibleDatafeedBase {
   constructor (datafeedUrl) {
-    this._subscribers = {}
-    this._datafeedUrl = datafeedUrl
-    this._configuration = defaultConfiguration()
-    this._requester = new Requester(datafeedUrl)
+    this._subscribers = {}; // 订阅的回调
+    this._resetCacheNeededCallbacks = {};
+    this._datafeedUrl = datafeedUrl;
+    this._configuration = defaultConfiguration();
+    this._requester = new Requester(datafeedUrl);
   }
 
   _send (urlPath, params) {
@@ -104,9 +103,9 @@ export class WSCompatibleDatafeedBase{
         if (!symbolData) {
           throw new Error('no such symbol');
         }
-        let symbolInfo = {
+        const symbolInfo = {
           name: symbol_name.toUpperCase(),
-          ticker: symbolData.symbol,
+          ticker: data.topic, // {exch}.{symbol} 唯一标示
           type: 'bitcoin',
           session: '24x7',
           timezone: 'Asia/Shanghai',
@@ -124,14 +123,14 @@ export class WSCompatibleDatafeedBase{
   }
 
   getBars(symbolInfo, resolution, rangeStartDate, rangeEndDate, onHistoryCallback, onErrorCallback, firstDataRequest) {
-    logMessage(`获取Bars: ${resolution}, 从${parseDate(new Date(rangeStartDate*1000))}到${parseDate(new Date(rangeEndDate*1000))}`)
-    resolution = getPeriodByInterval(resolution)
-    let params = {
-      exchange : symbolInfo.exchange,
-      symbol : symbolInfo.ticker,
-      type : resolution,
-      startTime : rangeStartDate,
-      endTime : rangeEndDate
+    logMessage(`获取Bars: ${resolution}, 从${parseDate(new Date(rangeStartDate * 1000))}到${parseDate(new Date(rangeEndDate * 1000))}`)
+    resolution = getPeriodByInterval(resolution);
+    const params = {
+      exchange: symbolInfo.exchange,
+      symbol: symbolInfo.ticker.split('.')[1],
+      type: resolution,
+      startTime: rangeStartDate,
+      endTime: rangeEndDate,
     }
     this._send('getKline', JSON.stringify(params)).then(resp => {
       let klines = JSON.parse(resp.content)
@@ -151,28 +150,30 @@ export class WSCompatibleDatafeedBase{
       })
     }, resp => {
       let reasonString = getErrorMessage(resp)
-      logMessage("获取Bars失败, error=" + reasonString)
+      logMessage('获取Bars失败, error=' + reasonString)
     })
   }
 
   subscribeBars (symbolInfo, resolution, onRealtimeCallback, subscriberUID, onResetCacheNeededCallback) {
     if (this._subscribers.hasOwnProperty(subscriberUID)) {
       logMessage(`${subscriberUID}已经被订阅了,无需再次订阅`)
-      return
+      return;
     }
-    resolution = getPeriodByInterval(resolution)
-    let topic =  `${symbolInfo.exchange}.${symbolInfo.ticker}.${resolution}`;
+    resolution = getPeriodByInterval(resolution);
+    let topic =  `${symbolInfo.ticker}.${resolution}`;
     this._subscribers[subscriberUID] = {
       lastBarTime: null,
-      api : "quote.kline",
-      topic : topic
+      api : 'quote.kline',
+      topic : topic,
     }
-    this._requester.subscribe("quote.kline", topic, _.bind(function(resp){
+    this._resetCacheNeededCallbacks[subscriberUID] = onResetCacheNeededCallback;
+    this._requester.subscribe('quote.kline', topic, _.bind(function(resp) {
       //如果subscription在等待数据的时候被取消了
       if (!this._subscribers.hasOwnProperty(subscriberUID)) {
-        logMessage("等待数据的时候已经被取消了 #" + subscriberUID)
+        logMessage('等待数据的时候已经被取消了 #' + subscriberUID)
         return
       }
+
       let bars = resp.data
       if (!bars || bars.leng === 0) return
       let lastBar = bars[bars.length - 1]
@@ -189,18 +190,18 @@ export class WSCompatibleDatafeedBase{
           low : Number(kline.low),
           volume : Number(kline.vol)
         }
-        onRealtimeCallback(bar)
+        onRealtimeCallback(bar);
       })
       subscriptionRecord.lastBarTime = lastBar.id
     }, this))
   }
 
   unsubscribeBars (subscriberUID) {
-    logMessage(`取消订阅#${subscriberUID}`)
-    let obj = this._subscribers[subscriberUID]
+    const obj = this._subscribers[subscriberUID]
     this._subscribers[subscriberUID] = null
     delete this._subscribers[subscriberUID]
     this._requester.unsubscribe(obj.api, obj.topic)
+    delete this._resetCacheNeededCallbacks[subscriberUID]
   }
 
   calculateHistoryDepth (resolution, resolutionBack, intervalBack) {
@@ -230,5 +231,13 @@ export class WSCompatibleDatafeedBase{
 
   close() {
     this._requester.close()
+  }
+
+  resetCache() {
+    for (let listenerGuid in this._resetCacheNeededCallbacks) {
+      if (this._resetCacheNeededCallbacks.hasOwnProperty(listenerGuid)) {
+        this._resetCacheNeededCallbacks[listenerGuid]();
+      }
+    }
   }
 }

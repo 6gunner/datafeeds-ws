@@ -64,14 +64,13 @@ export class WS {
   }
 
   send (data) {
-    console.log(data);
-    if (data.type === 0) {
-      logMessage(`ws订阅消息：api: ${data.api}, topic: ${data.topic}`)
-    } else if (data.type === 1) {
-      logMessage(`ws取消订阅消息：api: ${data.api}, topic: ${data.topic}`)
-    } else {
-      logMessage(`ws发送消息： ${JSON.stringify(data)}`)
-    }
+    // if (data.type === 0) {
+    //   logMessage(`ws订阅消息：api: ${data.api}, topic: ${data.topic}`)
+    // } else if (data.type === 1) {
+    //   logMessage(`ws取消订阅消息：api: ${data.api}, topic: ${data.topic}`)
+    // } else {
+    //   logMessage(`ws发送消息： ${JSON.stringify(data)}`)
+    // }
     this.webSocket.sendObj(data);
   }
 
