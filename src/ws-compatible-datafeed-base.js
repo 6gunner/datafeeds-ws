@@ -1,6 +1,8 @@
 import _ from 'underscore';
 import { getErrorMessage, logMessage } from './helpers';
 import { Requester } from './requester';
+import pako from 'pako';
+
 
 function parseDate(date) {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`;
@@ -37,31 +39,17 @@ function getPeriodByInterval(interval) {
   }
 }
 
-function getIntervalByPeriod(period) {
-  try {
-    let matched = period.match(/^(\d+)(s|min|hour|day|mon|week|year)$/)
-    let input = matched[0]
-    let r = matched[1] || 1
-    let type = matched[2]
-    switch (type) {
-      case 's':
-        return r + 'S';
-      case 'hour':
-        return '' + 60 * r;
-      case 'day':
-        return r + 'D';
-      case 'week':
-        return 7 * parseInt(r, 10) + 'D';
-      case 'mon':
-        return r + 'M';
-      case 'year':
-        return 12 * parseInt(r, 10) + 'M';
-      default:
-        return r
-    }
-  } catch(e) {
-    throw t
-  }
+function unzip(b64Data){
+    var strData   = atob(b64Data);
+    // Convert binary string to character-number array
+    var charData  = strData.split('').map(function(x){return x.charCodeAt(0);});
+    // Turn number array into byte-array
+    var binData   = new Uint8Array(charData);
+    // // unzip
+    var data    = pako.inflate(binData);
+    // Convert gunzipped byteArray back to ascii string:
+    strData   = String.fromCharCode.apply(null, new Uint16Array(data));
+    return strData;
 }
 
 export class WSCompatibleDatafeedBase {
@@ -87,6 +75,32 @@ export class WSCompatibleDatafeedBase {
     // 暂不实现
   }
 
+  getIntervalByPeriod(period) {
+        try {
+            let matched = period.match(/^(\d+)(s|min|hour|day|mon|week|year)$/)
+            let input = matched[0]
+            let r = matched[1] || 1
+            let type = matched[2]
+            switch (type) {
+                case 's':
+                    return r + 'S';
+                case 'hour':
+                    return '' + 60 * r;
+                case 'day':
+                    return r + 'D';
+                case 'week':
+                    return 7 * parseInt(r, 10) + 'D';
+                case 'mon':
+                    return r + 'M';
+                case 'year':
+                    return 12 * parseInt(r, 10) + 'M';
+                default:
+                    return r
+            }
+        } catch(e) {
+            throw t
+        }
+    }
   /**
    * @param symbolJsonStr symbol的json字符串
    * @param onSymbolResolvedCallback
@@ -94,8 +108,9 @@ export class WSCompatibleDatafeedBase {
    */
   resolveSymbol(symbolStr, onSymbolResolvedCallback, onResolveErrorCallback) {
     logMessage(`获取币对信息${symbolStr}`);
-    let exch_abb = symbolStr.split(':')[0];
-    let symbol_name = symbolStr.split(':')[1];
+    const exch_abb = symbolStr.split(':')[0];
+    const symbol_name = symbolStr.split(':')[1];
+    const exch_type = symbolStr.split(':')[2];
     this._send('getSymbol', exch_abb + '.' + symbol_name.replace('/', '').toLowerCase())
       .then(data => {
         logMessage(`解析到币对信息${data.content}`);
@@ -104,12 +119,13 @@ export class WSCompatibleDatafeedBase {
           throw new Error('no such symbol');
         }
         const symbolInfo = {
-          name: symbol_name.toUpperCase(),
-          ticker: data.topic, // {exch}.{symbol} 唯一标示
+          name: `${symbol_name}:${exch_type}`,
+          ticker: `${data.topic}`, // {exch}.{symbol} 唯一标识
           type: 'bitcoin',
           session: '24x7',
           timezone: 'Asia/Shanghai',
           exchange: exch_abb,
+          exch_type: exch_type,
           minmov: 1,
           pricescale: Number(`1e${symbolData.price_preci}`),
           volumescale: Number(`1e${symbolData.qty_preci}`),
@@ -132,8 +148,16 @@ export class WSCompatibleDatafeedBase {
       startTime: rangeStartDate,
       endTime: rangeEndDate,
     }
-    this._send('getKline', JSON.stringify(params)).then(resp => {
-      let klines = JSON.parse(resp.content)
+    let api = '';
+    console.log(`symbolInfo.exch_type: ${symbolInfo.exch_type}`);
+    if (symbolInfo.exch_type == 1 || symbolInfo.exch_type == 4) { // 普通或者智能的
+      api = 'getKlineGz'
+    } else if (symbolInfo.exch_type == 3){ // 聚合交易市场
+      api = 'getCmbKlineGz'
+    }
+    this._send(api, JSON.stringify(params)).then(resp => {
+      const unzipStr = unzip(resp.content);
+      let klines = JSON.parse(unzipStr)
       let bars = []
       klines.forEach((kline, index) => {
         bars.push({
@@ -160,14 +184,22 @@ export class WSCompatibleDatafeedBase {
       return;
     }
     resolution = getPeriodByInterval(resolution);
+    // cmb1.btcusdt.resolution
     let topic =  `${symbolInfo.ticker}.${resolution}`;
+    let api = '';
+    console.log(`symbolInfo.exch_type: ${symbolInfo.exch_type}`);
+    if (symbolInfo.exch_type == 1 || symbolInfo.exch_type == 4) { // 普通或者智能的
+      api = 'quote.kline';
+    } else if (symbolInfo.exch_type == 3) { // 聚合的
+      api = 'quote.cmbkline';
+    }
     this._subscribers[subscriberUID] = {
       lastBarTime: null,
-      api : 'quote.kline',
-      topic : topic,
+      api,
+      topic,
     }
     this._resetCacheNeededCallbacks[subscriberUID] = onResetCacheNeededCallback;
-    this._requester.subscribe('quote.kline', topic, _.bind(function(resp) {
+    this._requester.subscribe(api, topic, _.bind(function(resp) {
       //如果subscription在等待数据的时候被取消了
       if (!this._subscribers.hasOwnProperty(subscriberUID)) {
         logMessage('等待数据的时候已经被取消了 #' + subscriberUID)

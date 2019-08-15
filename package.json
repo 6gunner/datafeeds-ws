@@ -1,21 +1,21 @@
 {
   "name": "datafeeds-ws",
-  "version": "1.1.2",
+  "version": "1.1.4",
   "private": false,
   "main": "dist/bundle.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/6gunner/datafeeds-ws.git"
   },
-  "author": {
-  },
+  "author": {},
   "description": "这个项目用ws的方式实现了UDF的API,帮组大家通过ws的方式来和trading view的服务端对接数据",
   "keywords": [
-    "TradingView", "WebSocket"
+    "TradingView",
+    "WebSocket"
   ],
   "scripts": {
-    "build": "NODE_ENV=production rollup -c rollup.config.js",
-    "dev": "NODE_ENV=development rollup -c rollup.config.js"
+    "build-prod": "NODE_ENV=production rollup -c rollup.config.js",
+    "build-dev": "NODE_ENV=development rollup -c rollup.config.js"
   },
   "devDependencies": {
     "babel-core": "^6.26.3",
@@ -32,6 +32,8 @@
     "rollup-plugin-uglify": "^4.0.0"
   },
   "dependencies": {
+    "compressing": "^1.4.0",
+    "pako": "^1.0.10",
     "underscore": "^1.9.1"
   }
 }

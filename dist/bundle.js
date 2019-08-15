@@ -356,6 +356,7 @@
       value: function resolveSymbol(symbolStr, onSymbolResolvedCallback, onResolveErrorCallback) {
         var exch_abb = symbolStr.split(':')[0];
         var symbol_name = symbolStr.split(':')[1];
+        var exch_type = symbolStr.split(':')[2];
         this._send('getSymbol', exch_abb + '.' + symbol_name.replace('/', '').toLowerCase()).then(function (data) {
           logMessage('\u89E3\u6790\u5230\u5E01\u5BF9\u4FE1\u606F' + data.content);
           var symbolData = JSON.parse(data.content);
@@ -363,12 +364,13 @@
             throw new Error('no such symbol');
           }
           var symbolInfo = {
-            name: symbol_name.toUpperCase(),
-            ticker: data.topic, // {exch}.{symbol} 唯一标示
+            name: symbol_name + ':' + exch_type,
+            ticker: '' + data.topic, // {exch}.{symbol} 唯一标识
             type: 'bitcoin',
             session: '24x7',
             timezone: 'Asia/Shanghai',
             exchange: exch_abb,
+            exch_type: exch_type,
             minmov: 1,
             pricescale: Number('1e' + symbolData.price_preci),
             volumescale: Number('1e' + symbolData.qty_preci),
@@ -394,7 +396,16 @@
           startTime: rangeStartDate,
           endTime: rangeEndDate
         };
-        this._send('getKline', JSON.stringify(params)).then(function (resp) {
+        var api = '';
+
+        if (symbolInfo.exch_type == 1 || symbolInfo.exch_type == 4) {
+          // 普通或者智能的
+          api = 'getKline';
+        } else if (symbolInfo.exch_type == 3) {
+          // 聚合交易市场
+          api = 'getCmbKline';
+        }
+        this._send(api, JSON.stringify(params)).then(function (resp) {
           var klines = JSON.parse(resp.content);
           var bars = [];
           klines.forEach(function (kline, index) {
@@ -421,14 +432,24 @@
           return;
         }
         resolution = getPeriodByInterval(resolution);
+        // cmb1.btcusdt.resolution
         var topic = symbolInfo.ticker + '.' + resolution;
+        var api = '';
+
+        if (symbolInfo.exch_type == 1 || symbolInfo.exch_type == 4) {
+          // 普通或者智能的
+          api = 'quote.kline';
+        } else if (symbolInfo.exch_type == 3) {
+          // 聚合的
+          api = 'quote.cmbkline';
+        }
         this._subscribers[subscriberUID] = {
           lastBarTime: null,
-          api: 'quote.kline',
+          api: api,
           topic: topic
         };
         this._resetCacheNeededCallbacks[subscriberUID] = onResetCacheNeededCallback;
-        this._requester.subscribe('quote.kline', topic, _.bind(function (resp) {
+        this._requester.subscribe(api, topic, _.bind(function (resp) {
           //如果subscription在等待数据的时候被取消了
           if (!this._subscribers.hasOwnProperty(subscriberUID)) {
             return;
